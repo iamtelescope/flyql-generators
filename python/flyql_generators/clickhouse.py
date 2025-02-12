@@ -11,7 +11,7 @@ from flyql.tree import Node
 
 OPERATOR_TO_CLICKHOUSE_FUNC = {
     Operator.EQUALS.value: "equals",
-    Operator.NOT_EQUALS.value: "notEqulas",
+    Operator.NOT_EQUALS.value: "notEquals",
     Operator.EQUALS_REGEX.value: "match",
     Operator.NOT_EQUALS_REGEX.value: "match",
     Operator.GREATER_THAN.value: "greater",
