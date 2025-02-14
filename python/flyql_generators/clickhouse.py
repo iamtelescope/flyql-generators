@@ -24,19 +24,14 @@ LIKE_PATTERN_CHAR = "*"
 SQL_LIKE_PATTERN_CHAR = "%"
 
 
-class FieldType:
-    JSON_STRING = "jsonstring"
-    STRING = "string"
-
-
 class Field:
     def __init__(
         self,
         name: str,
-        _type: str,
+        jsonstring: bool,
         values: List[str] = [],
     ):
-        self.type = _type
+        self.jsonstring = jsonstring
         self.name = name
         self.values = values
 
@@ -87,7 +82,7 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
         if field_name not in fields:
             raise FlyqlError(f"unknown field: {field_name}")
         field = fields[field_name]
-        if field.type != FieldType.JSON_STRING:
+        if not field.jsonstring:
             raise FlyqlError("json for non json")
 
         json_path = spl[1:]
