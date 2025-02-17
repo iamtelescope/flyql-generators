@@ -58,11 +58,11 @@ Transforms into SQL:
 WHERE NOT match(key, 'regex_pattern')
 ```
 
-## Interpretation of keys with a Colon (`:`)
+## Interpretation of Keys with a Colon (`:`)
 
 If a key contains a colon (`:`), it is interpreted as a JSONPath. For example:
 
-FlyQL:
+**FlyQL:**
 ```flyql
 data:field=value
 ```
@@ -74,6 +74,11 @@ WHERE JSONExtractString(data, 'field') = 'value'
 ```
 
 Similarly, for all the operators described above, if the key contains a colon, the transformation will be applied using ClickHouse's `JSONExtract*` functions.
+
+### Support for `Map` and `Array` Types
+
+- **Map Support**: Single-level maps (`Map(key, value)`) are supported. If the values contain another map, it cannot be accessed in the same way.
+- **Array Support**: Accessing array elements by index is supported. If an array contains nested arrays, only the first level can be accessed.
 
 ## Examples
 

@@ -36,6 +36,20 @@ class Field:
         self.jsonstring = jsonstring
         self.type = _type
         self.values = values
+        self._is_map = None
+        self._is_array = None
+
+    def is_map(self):
+        if self._is_map is None:
+            self._is_map = self.type.lower().replace("nullable(", "").startswith("map(")
+        return self._is_map
+
+    def is_array(self):
+        if self._is_array is None:
+            self._is_array = (
+                self.type.lower().replace("nullable(", "").startswith("array(")
+            )
+        return self._is_array
 
 
 def is_number(value: str) -> bool:
@@ -79,39 +93,53 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
     text = ""
 
     if ":" in expression.key:
+        reverse_operator = ""
+        if expression.operator == Operator.NOT_EQUALS_REGEX.value:
+            reverse_operator = "not "
+        func = OPERATOR_TO_CLICKHOUSE_FUNC[expression.operator]
         spl = expression.key.split(":")
         field_name = spl[0]
         if field_name not in fields:
             raise FlyqlError(f"unknown field: {field_name}")
         field = fields[field_name]
-        if not field.jsonstring:
-            raise FlyqlError("json for non json")
 
-        json_path = spl[1:]
-        json_path = ", ".join([escape_param(x, context=None) for x in json_path])
+        if field.jsonstring:
+            json_path = spl[1:]
+            json_path = ", ".join([escape_param(x, context=None) for x in json_path])
 
-        func = OPERATOR_TO_CLICKHOUSE_FUNC[expression.operator]
-        str_value = escape_param(expression.value, context=None)
-        multi_if = [
-            f"JSONType({field.name}, {json_path}) = 'String', {func}(JSONExtractString({field.name}, {json_path}), {str_value})"
-        ]
-        if is_number(expression.value) and expression.operator not in [
-            Operator.EQUALS_REGEX.value,
-            Operator.NOT_EQUALS_REGEX.value,
-        ]:
-            multi_if.extend(
-                [
-                    f"JSONType({field.name}, {json_path}) = 'Int64', {func}(JSONExtractInt({field.name}, {json_path}), {expression.value})",
-                    f"JSONType({field.name}, {json_path}) = 'Double', {func}(JSONExtractFloat({field.name}, {json_path}), {expression.value})",
-                    f"JSONType({field.name}, {json_path}) = 'Bool', {func}(JSONExtractBool({field.name}, {json_path}), {expression.value})",
-                ]
-            )
-        multi_if.append("0")
-        multi_if_str = ",".join(multi_if)
-        reverse_operator = ""
-        if expression.operator == Operator.NOT_EQUALS_REGEX.value:
-            reverse_operator = "not "
-        text = f"{reverse_operator}multiIf({multi_if_str})"
+            str_value = escape_param(expression.value, context=None)
+            multi_if = [
+                f"JSONType({field.name}, {json_path}) = 'String', {func}(JSONExtractString({field.name}, {json_path}), {str_value})"
+            ]
+            if is_number(expression.value) and expression.operator not in [
+                Operator.EQUALS_REGEX.value,
+                Operator.NOT_EQUALS_REGEX.value,
+            ]:
+                multi_if.extend(
+                    [
+                        f"JSONType({field.name}, {json_path}) = 'Int64', {func}(JSONExtractInt({field.name}, {json_path}), {expression.value})",
+                        f"JSONType({field.name}, {json_path}) = 'Double', {func}(JSONExtractFloat({field.name}, {json_path}), {expression.value})",
+                        f"JSONType({field.name}, {json_path}) = 'Bool', {func}(JSONExtractBool({field.name}, {json_path}), {expression.value})",
+                    ]
+                )
+            multi_if.append("0")
+            multi_if_str = ",".join(multi_if)
+            text = f"{reverse_operator}multiIf({multi_if_str})"
+        elif field.is_map():
+            map_key = ":".join(spl[1:])
+            value = escape_param(expression.value, context=None)
+            text = f"{reverse_operator}{func}({field.name}['{map_key}'], {value})"
+        elif field.is_array():
+            array_index = ":".join(spl[1])
+            try:
+                array_index = int(array_index)
+            except Exception:
+                raise FlyqlError(f"invalid array index, expected number: {array_index}")
+            value = escape_param(expression.value, context=None)
+            text = f"{reverse_operator}{func}({field.name}[{array_index}], {value})"
+        else:
+            raise FlyqlError("path search for unsupported field type")
+
     else:
         if expression.key not in fields:
             raise FlyqlError(f"unknown field: {expression.key}")
