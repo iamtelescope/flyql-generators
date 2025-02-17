@@ -29,10 +29,12 @@ class Field:
         self,
         name: str,
         jsonstring: bool,
+        _type: str,
         values: List[str] = [],
     ):
-        self.jsonstring = jsonstring
         self.name = name
+        self.jsonstring = jsonstring
+        self.type = _type
         self.values = values
 
 
