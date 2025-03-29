@@ -7,7 +7,7 @@ name = "flyql_generators"
 version = "0.0.3"
 dependencies = [
     "clickhouse-driver == 0.2.7",
-    "flyql @ git+https://github.com/iamtelescope/flyql.git#subdirectory=python",
+    "flyql @ git+https://github.com/iamtelescope/flyql.git@30201d121d4afc83717cf59f8417add66e418ced#subdirectory=python"
 ]
 license = { text = "MIT License" }
 authors = [
