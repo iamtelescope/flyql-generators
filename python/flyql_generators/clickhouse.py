@@ -1,8 +1,6 @@
 from enum import Enum
 from typing import List, Mapping, Optional, Tuple
 
-from clickhouse_driver.util.escape import escape_param
-
 from flyql.exceptions import FlyqlError
 from flyql.expression import Expression
 from flyql.constants import Operator
@@ -22,6 +20,28 @@ OPERATOR_TO_CLICKHOUSE_FUNC = {
 
 LIKE_PATTERN_CHAR = "*"
 SQL_LIKE_PATTERN_CHAR = "%"
+
+ESCAPE_CHARS_MAP = {
+    "\b": "\\b",
+    "\f": "\\f",
+    "\r": "\\r",
+    "\n": "\\n",
+    "\t": "\\t",
+    "\0": "\\0",
+    "\a": "\\a",
+    "\v": "\\v",
+    "\\": "\\\\",
+    "'": "\\'",
+}
+
+
+def escape_param(item: str) -> str:
+    if item is None:
+        return "NULL"
+    elif isinstance(item, str):
+        return "'%s'" % "".join(ESCAPE_CHARS_MAP.get(c, c) for c in item)
+    else:
+        return item
 
 
 class Field:
@@ -105,9 +125,9 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
 
         if field.jsonstring:
             json_path = spl[1:]
-            json_path = ", ".join([escape_param(x, context=None) for x in json_path])
+            json_path = ", ".join([escape_param(x) for x in json_path])
 
-            str_value = escape_param(expression.value, context=None)
+            str_value = escape_param(expression.value)
             multi_if = [
                 f"JSONType({field.name}, {json_path}) = 'String', {func}(JSONExtractString({field.name}, {json_path}), {str_value})"
             ]
@@ -127,7 +147,7 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
             text = f"{reverse_operator}multiIf({multi_if_str})"
         elif field.is_map():
             map_key = ":".join(spl[1:])
-            value = escape_param(expression.value, context=None)
+            value = escape_param(expression.value)
             text = f"{reverse_operator}{func}({field.name}['{map_key}'], {value})"
         elif field.is_array():
             array_index = ":".join(spl[1])
@@ -135,7 +155,7 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
                 array_index = int(array_index)
             except Exception:
                 raise FlyqlError(f"invalid array index, expected number: {array_index}")
-            value = escape_param(expression.value, context=None)
+            value = escape_param(expression.value)
             text = f"{reverse_operator}{func}({field.name}[{array_index}], {value})"
         else:
             raise FlyqlError("path search for unsupported field type")
@@ -151,7 +171,7 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
         if field.values and expression.value not in field.values:
             raise FlyqlError(f"unnown value: {expression.value}")
 
-        value = escape_param(expression.value, context=None)
+        value = escape_param(expression.value)
         if expression.operator == Operator.EQUALS_REGEX.value:
             text = f"match({field.name}, {value})"
         elif expression.operator == Operator.NOT_EQUALS_REGEX.value:
@@ -159,7 +179,7 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
         elif expression.operator in [Operator.EQUALS.value, Operator.NOT_EQUALS.value]:
             operator = expression.operator
             is_like_pattern, value = prepare_like_pattern_value(expression.value)
-            value = escape_param(value, context=None)
+            value = escape_param(value)
             if is_like_pattern:
                 if expression.operator == Operator.EQUALS.value:
                     operator = "LIKE"

@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "flyql_generators"
 version = "0.0.3"
 dependencies = [
-    "clickhouse-driver == 0.2.7",
     "flyql @ git+https://github.com/iamtelescope/flyql.git@13f3dbc93224cad802f163cd04ec6c7754c3740f#subdirectory=python"
 ]
 license = { text = "MIT License" }
