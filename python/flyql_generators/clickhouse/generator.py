@@ -6,6 +6,8 @@ from flyql.expression import Expression
 from flyql.constants import Operator
 from flyql.tree import Node
 
+from .field import Field
+from .helpers import validate_operation
 
 OPERATOR_TO_CLICKHOUSE_FUNC = {
     Operator.EQUALS.value: "equals",
@@ -35,50 +37,26 @@ ESCAPE_CHARS_MAP = {
 }
 
 
-def escape_param(item: str) -> str:
+def escape_param(item) -> str:
     if item is None:
         return "NULL"
     elif isinstance(item, str):
         return "'%s'" % "".join(ESCAPE_CHARS_MAP.get(c, c) for c in item)
+    elif isinstance(item, bool):
+        return str(item)
+    elif isinstance(item, (int, float)):
+        return str(item)
     else:
-        return item
+        return str(item)
 
 
-class Field:
-    def __init__(
-        self,
-        name: str,
-        jsonstring: bool,
-        _type: str,
-        values: List[str] = [],
-    ):
-        self.name = name
-        self.jsonstring = jsonstring
-        self.type = _type
-        self.values = values
-        self._is_map = None
-        self._is_array = None
-
-    def is_map(self):
-        if self._is_map is None:
-            self._is_map = self.type.lower().replace("nullable(", "").startswith("map(")
-        return self._is_map
-
-    def is_array(self):
-        if self._is_array is None:
-            self._is_array = (
-                self.type.lower().replace("nullable(", "").startswith("array(")
-            )
-        return self._is_array
-
-
-def is_number(value: str) -> bool:
+def is_number(value) -> bool:
     try:
         float(value)
-    except ValueError:
+    except (ValueError, TypeError):
         try:
             int(value)
-        except ValueError:
+        except (ValueError, TypeError):
             return False
         else:
             return True
@@ -89,23 +67,24 @@ def is_number(value: str) -> bool:
 def prepare_like_pattern_value(value: str) -> Tuple[bool, str]:
     pattern_found = False
     new_value = ""
-    for idx, char in enumerate(value):
+    i = 0
+    while i < len(value):
+        char = value[i]
         if char == LIKE_PATTERN_CHAR:
-            if idx == 0:
+            if i > 0 and value[i - 1] == "\\":
+                new_value += LIKE_PATTERN_CHAR
+            else:
                 new_value += SQL_LIKE_PATTERN_CHAR
                 pattern_found = True
-            else:
-                if value[idx - 1] == "\\":
-                    new_value += LIKE_PATTERN_CHAR
-                else:
-                    new_value += SQL_LIKE_PATTERN_CHAR
-                    pattern_found = True
         elif char == SQL_LIKE_PATTERN_CHAR:
             pattern_found = True
             new_value += "\\"
             new_value += SQL_LIKE_PATTERN_CHAR
+        elif char == "\\" and i + 1 < len(value) and value[i + 1] == LIKE_PATTERN_CHAR:
+            new_value += "\\"
         else:
             new_value += char
+        i += 1
     return pattern_found, new_value
 
 
@@ -123,11 +102,13 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
             raise FlyqlError(f"unknown field: {field_name}")
         field = fields[field_name]
 
+        validate_operation(expression.value, field.normalized_type, expression.operator)
+
         if field.jsonstring:
             json_path = spl[1:]
             json_path = ", ".join([escape_param(x) for x in json_path])
 
-            str_value = escape_param(expression.value)
+            str_value = escape_param(str(expression.value))
             multi_if = [
                 f"JSONType({field.name}, {json_path}) = 'String', {func}(JSONExtractString({field.name}, {json_path}), {str_value})"
             ]
@@ -145,17 +126,17 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
             multi_if.append("0")
             multi_if_str = ",".join(multi_if)
             text = f"{reverse_operator}multiIf({multi_if_str})"
-        elif field.is_map():
+        elif field.is_map:
             map_key = ":".join(spl[1:])
-            value = escape_param(expression.value)
+            value = escape_param(str(expression.value))
             text = f"{reverse_operator}{func}({field.name}['{map_key}'], {value})"
-        elif field.is_array():
+        elif field.is_array:
             array_index = ":".join(spl[1])
             try:
                 array_index = int(array_index)
             except Exception:
                 raise FlyqlError(f"invalid array index, expected number: {array_index}")
-            value = escape_param(expression.value)
+            value = escape_param(str(expression.value))
             text = f"{reverse_operator}{func}({field.name}[{array_index}], {value})"
         else:
             raise FlyqlError("path search for unsupported field type")
@@ -165,20 +146,21 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
             raise FlyqlError(f"unknown field: {expression.key}")
 
         field = fields[expression.key]
-        values = field.values
-        operator = expression.operator
 
         if field.values and expression.value not in field.values:
-            raise FlyqlError(f"unnown value: {expression.value}")
+            raise FlyqlError(f"unknown value: {expression.value}")
 
-        value = escape_param(expression.value)
+        validate_operation(expression.value, field.normalized_type, expression.operator)
+
         if expression.operator == Operator.EQUALS_REGEX.value:
+            value = escape_param(str(expression.value))
             text = f"match({field.name}, {value})"
         elif expression.operator == Operator.NOT_EQUALS_REGEX.value:
+            value = escape_param(str(expression.value))
             text = f"not match({field.name}, {value})"
         elif expression.operator in [Operator.EQUALS.value, Operator.NOT_EQUALS.value]:
             operator = expression.operator
-            is_like_pattern, value = prepare_like_pattern_value(expression.value)
+            is_like_pattern, value = prepare_like_pattern_value(str(expression.value))
             value = escape_param(value)
             if is_like_pattern:
                 if expression.operator == Operator.EQUALS.value:
@@ -187,6 +169,10 @@ def expression_to_sql(expression: Expression, fields: Mapping[str, Field]) -> st
                     operator = "NOT LIKE"
             text = f"{field.name} {operator} {value}"
         else:
+            if isinstance(expression.value, str):
+                value = escape_param(expression.value)
+            else:
+                value = str(expression.value)
             text = f"{field.name} {expression.operator} {value}"
     return text
 
