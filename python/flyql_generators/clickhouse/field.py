@@ -14,6 +14,7 @@ from .constants import (
     NORMALIZED_TYPE_GEOMETRY,
     NORMALIZED_TYPE_INTERVAL,
     NORMALIZED_TYPE_SPECIAL,
+    NORMALIZED_TYPE_JSON,
 )
 
 REGEX = {
@@ -25,6 +26,7 @@ REGEX = {
     NORMALIZED_TYPE_ARRAY: re.compile(r'^array\s*\('),
     NORMALIZED_TYPE_MAP: re.compile(r'^map\s*\('),
     NORMALIZED_TYPE_TUPLE: re.compile(r'^tuple\s*\('),
+    NORMALIZED_TYPE_JSON: re.compile(r'^json\s*\('),
 }
 
 
@@ -65,6 +67,12 @@ def normalize_clickhouse_type(ch_type: str) -> Optional[str]:
     if normalized in NORMALIZED_TYPE_TO_CLICKHOUSE_TYPES[NORMALIZED_TYPE_DATE]:
         return NORMALIZED_TYPE_DATE
 
+    if REGEX[NORMALIZED_TYPE_JSON].match(normalized):
+        return NORMALIZED_TYPE_JSON
+
+    if normalized in NORMALIZED_TYPE_TO_CLICKHOUSE_TYPES[NORMALIZED_TYPE_JSON]:
+        return NORMALIZED_TYPE_JSON
+
     if REGEX[NORMALIZED_TYPE_ARRAY].match(normalized):
         return NORMALIZED_TYPE_ARRAY
 
@@ -101,3 +109,4 @@ class Field:
         self.normalized_type = normalize_clickhouse_type(_type)
         self.is_map = self.normalized_type == NORMALIZED_TYPE_MAP
         self.is_array = self.normalized_type == NORMALIZED_TYPE_ARRAY
+        self.is_json = self.normalized_type == NORMALIZED_TYPE_JSON

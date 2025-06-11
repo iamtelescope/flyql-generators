@@ -22,6 +22,7 @@ def fields():
         "active": Field("active", False, "Bool"),
         "created_at": Field("created_at", False, "Date"),
         "json_field": Field("json_field", True, "String"),
+        "new_json": Field("new_json", False, "JSON"),
         "tags": Field("tags", False, "Array(String)"),
         "metadata": Field("metadata", False, "Map(String, String)"),
         "enum_field": Field("enum_field", False, "Enum8", ["value1", "value2"]),
@@ -158,6 +159,80 @@ class TestExpressionToSQL:
     def test_forbidden_operation(self, fields):
         expr = Expression("count", Operator.EQUALS_REGEX.value, "test", True)
         with pytest.raises(FlyqlError, match="operation not allowed"):
+            expression_to_sql(expr, fields)
+
+
+class TestNewJSONFields:
+
+    def test_json_field_simple_path(self, fields):
+        expr = Expression("new_json:name", Operator.EQUALS.value, "test", True)
+        result = expression_to_sql(expr, fields)
+        expected = "new_json.name = 'test'"
+        assert result == expected
+
+    def test_json_field_nested_path(self, fields):
+        expr = Expression("new_json:user:name", Operator.EQUALS.value, "john", True)
+        result = expression_to_sql(expr, fields)
+        expected = "new_json.user.name = 'john'"
+        assert result == expected
+
+    def test_json_field_number_value(self, fields):
+        expr = Expression("new_json:age", Operator.EQUALS.value, 25, False)
+        result = expression_to_sql(expr, fields)
+        expected = "new_json.age = 25.0"
+        assert result == expected
+
+    def test_json_field_underscore_in_name(self, fields):
+        expr = Expression('new_json:field_name', Operator.EQUALS.value, "test", True)
+        result = expression_to_sql(expr, fields)
+        assert result == 'new_json.field_name = \'test\''
+
+    def test_json_field_hyphen_in_name(self, fields):
+        expr = Expression('new_json:field-name', Operator.EQUALS.value, "test", True)
+        result = expression_to_sql(expr, fields)
+        assert result == 'new_json.field-name = \'test\''
+
+    def test_json_field_with_dots(self, fields):
+        expr = Expression('new_json:field.subfield', Operator.EQUALS.value, "test", True)
+        result = expression_to_sql(expr, fields)
+        assert result == 'new_json.field.subfield = \'test\''
+
+    def test_json_field_starting_with_underscore(self, fields):
+        expr = Expression('new_json:_private', Operator.EQUALS.value, "test", True)
+        result = expression_to_sql(expr, fields)
+        assert result == 'new_json._private = \'test\''
+
+
+class TestJSONFieldValidationErrors:
+
+    def test_json_field_with_quotes(self, fields):
+        expr = Expression('new_json:field"with"quotes', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
+            expression_to_sql(expr, fields)
+
+    def test_json_field_with_spaces(self, fields):
+        expr = Expression('new_json:field with spaces', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
+            expression_to_sql(expr, fields)
+
+    def test_json_field_with_special_chars(self, fields):
+        expr = Expression('new_json:field@special', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
+            expression_to_sql(expr, fields)
+
+    def test_json_field_starting_with_digit(self, fields):
+        expr = Expression('new_json:123field', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
+            expression_to_sql(expr, fields)
+
+    def test_json_field_starting_with_hyphen(self, fields):
+        expr = Expression('new_json:-invalid', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
+            expression_to_sql(expr, fields)
+
+    def test_json_field_empty_path_part(self, fields):
+        expr = Expression('new_json:user::field', Operator.EQUALS.value, "test", True)
+        with pytest.raises(FlyqlError, match="Invalid JSON path part"):
             expression_to_sql(expr, fields)
 
 

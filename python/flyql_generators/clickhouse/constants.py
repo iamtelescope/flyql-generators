@@ -9,6 +9,7 @@ NORMALIZED_TYPE_TUPLE = 'tuple'
 NORMALIZED_TYPE_GEOMETRY = 'geometry'
 NORMALIZED_TYPE_INTERVAL = 'interval'
 NORMALIZED_TYPE_SPECIAL = 'special'
+NORMALIZED_TYPE_JSON = 'json'
 
 NORMALIZED_TYPE_TO_CLICKHOUSE_TYPES = {
     NORMALIZED_TYPE_STRING: {
@@ -20,7 +21,7 @@ NORMALIZED_TYPE_TO_CLICKHOUSE_TYPES = {
         'national char varying', 'national character', 'national char',
         'binary large object', 'binary varying', 'clob', 'nchar', 'nvarchar',
         'varchar2', 'binary', 'varbinary', 'bytea', 'uuid', 'ipv4', 'ipv6',
-        'enum8', 'enum16', 'json'
+        'enum8', 'enum16'
     },
     NORMALIZED_TYPE_INT: {
         'int8', 'int16', 'int32', 'int64', 'int128', 'int256',
@@ -49,4 +50,6 @@ NORMALIZED_TYPE_TO_CLICKHOUSE_TYPES = {
     },
     NORMALIZED_TYPE_GEOMETRY: {'geometry', 'point', 'polygon', 'multipolygon', 'linestring', 'ring'},
     NORMALIZED_TYPE_SPECIAL: {'nothing', 'nested', 'object', 'dynamic', 'variant'},
+    NORMALIZED_TYPE_JSON: {'json'},
+
 }

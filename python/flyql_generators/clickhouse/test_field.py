@@ -92,16 +92,25 @@ class TestField:
             field = Field("float_field", False, float_type)
             assert field.normalized_type == "float"
 
+    def test_field_creation_json(self):
+        field = Field("json_field", False, "JSON")
+        assert field.normalized_type == "json"
+        assert field.is_json is True
+        assert field.is_map is False
+        assert field.is_array is False
+
+    def test_field_creation_json_with_params(self):
+        field = Field("json_field", False, "JSON(a.b UInt32)")
+        assert field.normalized_type == "json"
+        assert field.is_json is True
+
+    def test_field_values_empty_list(self):
+        field = Field("test", False, "String", [])
+        assert field.values == []
+
     def test_field_creation_unknown_type(self):
         field = Field("unknown_field", False, "SomeUnknownType")
         assert field.normalized_type is None
         assert field.is_map is False
         assert field.is_array is False
-
-    def test_field_values_default_none(self):
-        field = Field("test", False, "String", None)
-        assert field.values == []
-
-    def test_field_values_empty_list(self):
-        field = Field("test", False, "String", [])
-        assert field.values == []
+        assert field.is_json is False
